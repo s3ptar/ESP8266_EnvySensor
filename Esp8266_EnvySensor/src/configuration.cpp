@@ -12,10 +12,15 @@
 * Includes
 ***********************************************************************/
 #include "configuration.h"
-#include "WiFi.h"
+#if defined(ESP8266)
+    #include <ESP8266WiFi.h>
+#elif defined(ESP32)
+    #include "WiFi.h"
+#endif
 #include "settings.h"
 #include "error_codes.h"
-#include <FS.h>
+#include "LittleFS.h"
+#include "string.h"
 /***********************************************************************
 * Informations
 ***********************************************************************/
@@ -75,14 +80,14 @@ error_type restore_configuration(){
     sprintf(glb_device_name, "%s%02x%02x%02x", DeviceName,glb_MAC_address[3],glb_MAC_address[4],glb_MAC_address[5]);
 
     //Try to open SPIFFS
-    if (SPIFFS.begin()) {
-        DEBUG_ESP_PRINTF("SPIFFS mounting successfully");
-        if (SPIFFS.exists("/config.json")) {
+    if (LittleFS.begin()) {
+        system_log("SPIFFS mounting successfully", dbg_info);
+        if (LittleFS.exists("/config.json")) {
             //file exists, reading and loading
-            DEBUG_ESP_PRINTF("reading config file");
-            File configFile = SPIFFS.open("/config.json");
+            system_log("reading config file", dbg_info);
+            File configFile = LittleFS.open(F("/config.json"),  "r");
             if (configFile) {
-                DEBUG_ESP_PRINTF("opened config file");
+                system_log("opened config file", dbg_info);
                 // Allocate a buffer to store contents of the file.
                 deserializeJson(ConfigJSON, configFile);  
                 strlcpy(wlan_properties.ssid,        // <- destination
@@ -102,7 +107,7 @@ error_type restore_configuration(){
             return_code = er_no_config_file;
         }
     } else {
-        DEBUG_ESP_PRINTF("failed to mount FS");
+        system_log("failed to mount FS", dbg_info);
         return_code = er_spiffs_fault;
     }
     return return_code ;
@@ -111,18 +116,139 @@ error_type restore_configuration(){
 }
 
 /***********************************************************************
-*! \fn          bool get_bool_parameter(uint8_t parameter)
-*  \brief       return requestet boolean parameter
-*  \param       uint8_t parameter
+*! \fn          void system_delay(uint32_t ms_delay)
+*  \brief       wait ms
+*  \param       uint32_t ms_delay
 *  \exception   none
-*  \return      boolean
+*  \return      none
 ***********************************************************************/
+void system_delay(uint32_t ms_delay){
 
+#if defined(ESP8266)
+    delayMicroseconds(ms_delay);
+#elif defined(ESP32)
+    vTaskDelay(ms_delay);
+#endif
+
+}
 
 /***********************************************************************
-*! \fn          char* get_bool_parameter(uint8_t parameter)
+*! \fn          void system_log(const char *msg, uint8_t InformationClass)
+*  \brief       write information to debug output und storage
+*  \param       const char *msg - message
+*  \param       uint8_t InformationClass - eg information or verbose
+*  \exception   none
+*  \return      none
+***********************************************************************/
+void system_log(const char *msg, uint8_t InformationClass){
+
+#if defined(ESP8266)
+    
+    DEBUG_ESP_PRINTF(msg);
+
+#elif defined(ESP32)
+    switch(InformationClass){
+
+        case dbg_error : {
+            
+            log_e(msg):
+            break;
+        }
+
+        case dbg_warning: {
+            
+            log_w(msg):
+            break;
+        }
+
+        case dbg_info : {
+
+            log_i(msg):
+            break;
+        }
+
+        case dbg_debug : {
+
+            break;
+        }
+
+        case dbg_verbose : {
+
+            log_v(msg):
+            break;
+        }
+        default:{
+
+        }
+
+
+    }
+#endif
+
+}
+
+/***********************************************************************
+*! \fn          error_type
 *  \brief       return requestet boolean parameter
 *  \param       uint8_t parameter
 *  \exception   none
-*  \return      char pointer
+*  \return      error_type return error codes
 ***********************************************************************/
+error_type connect_wlan(){
+
+    error_type return_code = er_wlan_disable;
+    uint8_t wlan_connection_fail_cnt = wlan_reconnects;
+
+    //WiFi.disconnect(true,true);
+    if(wlan_properties.wlan_enabled){
+        system_log("WLan On", dbg_verbose);
+        //+++++++++++++ check modus 0 = WLan Client, 1 = AccessPoint Modus Modus ++++++
+        if(wlan_properties.wlan_ap_modus){
+            //AP Modus
+            #if defined(ESP8266)
+                WiFi.mode(WIFI_AP);
+            #elif defined(ESP32)
+                WiFi.mode(WIFI_MODE_AP);
+            #endif
+            return_code = er_wlan_ap_mode;
+            system_log("WLan AP Modus", dbg_verbose);
+            WiFi.softAP(wlan_properties.ssid, wlan_properties.passphrase);
+        }else{
+            //Client Modus
+            return_code = er_wlan_client_mode;
+            #if defined(ESP8266)
+                WiFi.mode(WIFI_STA);
+            #elif defined(ESP32)
+                WiFi.mode(WIFI_MODE_STA);
+            #endif
+            system_log("WLan Station Modus", dbg_verbose);
+            WiFi.setHostname(glb_device_name);
+            system_log( glb_device_name, dbg_info);
+            WiFi.begin(wlan_properties.ssid, wlan_properties.passphrase); 
+            system_log("wait for conntect", dbg_verbose);
+            system_delay(2000); 
+            while (!WiFi.isConnected()) {
+                system_delay(2000);
+                system_log("Connection Trys %d", wlan_connection_fail_cnt);
+                wlan_connection_fail_cnt--;
+                if(!wlan_connection_fail_cnt){
+                    //Switch to default WLAN AP Modus if no connect to SSID
+                    return_code = er_wlan_default_ap;
+                    #if defined(ESP8266)
+                        WiFi.mode(WIFI_AP);
+                    #elif defined(ESP32)
+                        WiFi.mode(WIFI_MODE_AP);
+                    #endif
+                    system_log("WLan Default AP Modus", dbg_verbose);
+                    WiFi.softAP(glb_device_name, "1234567890");
+                    //ESP.restart();
+                }
+            }
+            system_log("conntecd!", dbg_verbose);
+            ip = WiFi.localIP();
+
+        }
+        Serial.println(WiFi.localIP());
+    }
+    return return_code ;
+}

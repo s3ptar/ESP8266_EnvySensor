@@ -1,37 +1,23 @@
 /***********************************************************************
-*! \file:                   configuration.h
+*! \file:                   mozilla_iot.h
 *  \projekt:                FT800_ESP
-*  \created on:             25.07.2020
+*  \created on:             04.06.2021
 *  \author:                 R. Gräber
 *  \version:                0
 *  \history:                -
 *  \brief                   Definitionsfile for global variables
 ***********************************************************************/
  
-#ifndef _configuration_h_
-#define _configuration_h_
+#ifndef _mozilla_iot_h_
+#define _mozilla_iot_h_
  
 /***********************************************************************
-* Includes
-**********************************************************************/
-#include "stdint.h"
-#include "LittleFS.h"
-#include "SPI.h"
-#include "error_codes.h"
-#include <Arduino.h>
-#include "settings.h"
-#if defined(ESP8266)
-    #include <ESP8266WiFi.h>
-#elif defined(ESP32)
-    #include "WiFi.h"
-#endif
-#include <ESPAsyncWebServer.h>
-#ifdef _mozilla_iot_enable_
-    #define ARDUINOJSON_USE_LONG_LONG 1
-    #include <Thing.h>
-    #include <WebThingAdapter.h>
-#endif
-#include <ArduinoJson.h>
+ * Includes
+ **********************************************************************/
+ #include "stdint.h"
+ #include "error_codes.h"
+ #include <Arduino.h>
+ #include "settings.h"
 /***********************************************************************
  * Informations
  **********************************************************************/
@@ -40,25 +26,8 @@
 /***********************************************************************
  * Declarations
  **********************************************************************/
- #define glb_device_name_length  64
- #define wlan_reconnects         3
 
-/*++++++++++++++++++++++++++++++
-    ESP_LOGE - error (lowest)
-    ESP_LOGW - warning
-    ESP_LOGI - info
-    ESP_LOGD - debug
-    ESP_LOGV - verbose (highest)
-    ++++++++++++++++++++++++++*/
- enum log_infomations{
-    dbg_nolog = 0,
-    dbg_error,
-    dbg_warning,
-    dbg_info,
-    dbg_debug,
-    dbg_verbose
 
-};
 /***********************************************************************
  * Global Variable
  **********************************************************************/
@@ -74,11 +43,8 @@
 /***********************************************************************
  * Funtions 
  **********************************************************************/
-error_type restore_configuration();
-error_type connect_wlan();
 error_type config_mozilla_iot();
 void update_iot();
-void system_delay(uint32_t ms_delay);
-void system_log(const char *msg, uint8_t InformationClass);
+
 
 #endif //_filehandling_h_
